@@ -1,2 +1,2 @@
-DaniTest
+Test Project
 ========
