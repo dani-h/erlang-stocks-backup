@@ -65,7 +65,14 @@ init([]) ->
 
 handle_call(stop, _From, State) ->
 	odbc:stop(),
-	{stop, normal, {sql,shutdown_ok}, State}.
+	{stop, normal, {sql,shutdown_ok}, State};
+handle_call({historical,RecList}, From, State) ->
+	Query = gen_query(historical,RecList),
+	{ok,Pid} = odbc:connect(?ConnectStr,[{timeout, 200000}]),
+	odbc:sql_query(Pid,Query),
+	odbc:disconnect(Pid),
+    Reply = ok,
+    {reply, Reply, State}.
 	
 handle_cast({news,RecList}, State) ->
 	Query = gen_query(news,RecList),
@@ -82,9 +89,11 @@ handle_cast({daily,RecList}, State) ->
 handle_cast({historical,RecList}, State) ->
 	Query = gen_query(historical,RecList),
 	{ok,Pid} = odbc:connect(?ConnectStr,[{timeout, 200000}]),
-	Result = odbc:sql_query(Pid,Query),
+	odbc:sql_query(Pid,Query),
 	odbc:disconnect(Pid),
 	{noreply, State}.
+
+
   
   
   
