@@ -9,18 +9,40 @@
 -compile(export_all).
 %% -record(hist_stock, {symbol, date, open, high, low, close, volume}).
 
+% {'EXIT',{badarith,[{erlang,'+',[a,1],[]},
+                   % {erl_eval,do_apply,6,[{file,"erl_eval.erl"},{line,573}]},
+                   % {erl_eval,expr,5,[{file,"erl_eval.erl"},{line,357}]},
+                   % {shell,exprs,7,[{file,"shell.erl"},{line,674}]},
+                   % {shell,eval_exprs,7,[{file,"shell.erl"},{line,629}]},
+                   % {shell,eval_loop,3,[{file,"shell.erl"},{line,614}]}]}}
+
+
+% t(URL, Dates, Ticker) ->
+	% case catch({ok, {_,_,CSV}} = httpc:request(URL, foo)) of
+		% {'EXIT', Error} -> hist_server ! {Ticker, Dates};
+		% _ -> 
+			% case (string:chr(CSV, $!) > 0) of 
+				% false ->	parse_csv({CSV}, Ticker);
+				% true -> 	error
+			% end
+	% end.
 %% Main function, the 200 decides at what point of the Tickers_List
 %% it should clear the memory, i.e do 200 sequentially and continue
 main(Old, Recent) ->
+	case whereis(writer) of
+		undefined -> register(writer, spawn(?MODULE, writer, []));
+		_ -> already_defined
+	end,
+	inets:start(),
 	server_sql:start_link(),
 	io:format("~nStarting...~n~n"),
 	reg(),
 	Dates = convert_dates(Old, Recent),
-	inets:start(),
+	inets:start(httpc, [{profile, foo}]),
 	io:format("Parsing Nasdaq..."),
-	Tickers = nasdaqTickers:get(),
+	Tickers = lists:reverse(nasdaqTickers:get()),
 	io:format("Parsing Yahoo...~n"),
-	parse_segment(Tickers, 400, Dates),
+	parse_segment(Tickers, 5000, Dates),
 	io:format("Done~n").
 	
 reg() ->
@@ -51,13 +73,13 @@ convert_dates(Old, Recent) ->
 %% Integer is how big of a list it will work with, before clearing memory
 parse_segment(Tickers_List, N, Dates) when length(Tickers_List) > N ->
 	{A, B} = lists:split(N, Tickers_List),
-	divide_tasks(A, 20, 0, Dates),
+	divide_tasks(A, 1000, 0, Dates),
 	io:format("Segment done~n"),
-	inets:stop(),
-	inets:start(),
+	inets:stop(httpc, foo),
+	inets:start(httpc, [{profile, foo}]),
 	parse_segment(B, N, Dates);
 parse_segment(Tickers_List, _, Dates) ->
-	divide_tasks(Tickers_List, 20, 0, Dates),
+	divide_tasks(Tickers_List, 1000, 0, Dates),
 	ok.
 
 %% divide_tasks(List :: List, N :: Integer, Amount_Of_Processes :: Integer)
@@ -75,6 +97,7 @@ divide_tasks(List, _, Amount, Dates) ->
 %% loop_receive(Amount_of_spawns :: Integer)
 %% Amount_of_spawns is the amount of messages it has to receive
 loop_receive(Amount_of_spawns) ->
+	process_flag(trap_exit, true),
 	loop_receive(Amount_of_spawns, 0).
 loop_receive(M, N) ->
 	case M == N of 
@@ -82,9 +105,13 @@ loop_receive(M, N) ->
 			ok;
 		false ->
 			receive
-				Pid when is_pid(Pid) -> 
+				{'EXIT', Pid, normal} ->
+					io:format("Finished Pid: ~p~n", [Pid]),
 					loop_receive(M, N + 1);
-				CloseMsg -> io:format("~p~n", [CloseMsg])
+				% {Ticker, Dates} ->
+					% io:format("Restarting~n");
+				A -> io:format("CatchAll actived~n"),
+					io:format("~p~n", [A])
 				% after 10000 ->
 						% timeout
 			end
@@ -100,7 +127,6 @@ iterate_tickers([H|T], Dates) ->
 	processTicker(H, Dates),
 	iterate_tickers(T, Dates);
 iterate_tickers([], _Dates) ->
-	hist_server ! self(),
 	ok.
 
 %% Processes each ticker by getching the CSV for 
@@ -111,20 +137,22 @@ processTicker(Ticker, Dates) ->
 	URL = "http://ichart.yahoo.com/table.csv?s="++Ticker
 		++"&a=" ++ Old_Month ++"&b="++ Old_Day ++ "&c=" ++ Old_Year
 		++"&d="++ Recent_Month ++ "&e=" ++ Recent_Day ++ "&f="++ Recent_Year
-			++"&d=m&ignore=.csv",	
-	{ok, {_,_,CSV}} = httpc:request(URL),
+			++"&d=m&ignore=.csv",
+	{ok, {_,_,CSV}} = httpc:request(URL, foo),
 	case (string:chr(CSV, $!) > 0) of 
 		false ->	parse_csv({CSV}, Ticker);
 		true -> 	error
 	end.
+
 
 %% Parses a single CSV file and calls iterate_records method to
 %% iterate over it and create records
 parse_csv(CSV, Ticker) ->
 	[_|List] = re:split(tuple_to_list(CSV), "\n",
 						[{return,list},{parts,infinity}]),
-	All_Records = iterate_records(List, [], Ticker).
-%%     genserv_sql:call_hist(whereis(sqlserv),lists:flatten(All_Records)).
+	All_Records = iterate_records(List, [], Ticker),
+	io:format("Wrote ticker: ~p~n", [Ticker]).
+    % server_sql:call_hist(lists:flatten(All_Records)).
 %% 	io:format("~p~n", [iterate_records(List, [], Ticker)]).
 
 % Iterates over records and calls iterate_records function 
@@ -140,5 +168,17 @@ iterate_records([], Acc, _Ticker) -> Acc.
 %% Makes the records
 make_records(Line, Ticker) ->
 	[Date, Open, High, Low, Close, Volume, _] = string:tokens(Line, ","),
+	writer ! Ticker ++ ", " ++ Date ++ ", " ++ Volume,
 	#hist_stock{symbol = Ticker, date = Date, open = Open, high = High,
 				low = Low, close = Close, volume = Volume}.
+				
+writer() ->
+	{ok, F}=file:open("C:/Users/HP/Desktop/DaniRepos/src/myfile.txt", [append]),
+	receive
+		Msg -> 
+			file:write(F, Msg ++ "~n"),
+			writer()
+		after 30000 ->
+			timeout
+	end.
+

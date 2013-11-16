@@ -5,7 +5,7 @@
 -export([getServer/1,get/0,filteredValues/3,deleteSymbols/1]).
 
 getServer(Quary) ->
-	{ok, {_,_,Body}} = httpc:request(Quary),
+	{ok, {_,_,Body}} = httpc:request(Quary, foo),
 	{Body}.
 
 

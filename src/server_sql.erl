@@ -83,7 +83,6 @@ handle_cast({historical,RecList}, State) ->
 	Query = gen_query(historical,RecList),
 	{ok,Pid} = odbc:connect(?ConnectStr,[{timeout, 200000}]),
 	Result = odbc:sql_query(Pid,Query),
-	io:format("~p~n", Result),
 	odbc:disconnect(Pid),
 	{noreply, State}.
   
