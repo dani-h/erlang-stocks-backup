@@ -1,6 +1,7 @@
 -module(news_worker).
 -compile(export_all).
--record(news, {date = "", ticker = "", headline = "", url = ""}).
+-include("../include/defs.hrl").
+%% -record(news, {date = "", ticker = "", headline = "", url = ""}).
 
 process_news(Ticker) ->
 	inets:start(),
@@ -25,13 +26,17 @@ extract_elements(Tuples, Ticker) ->
 	{_, _, _, _, _, _, _, _, Items, _, _, _} = Tuples,
 	make_rec(Items, Ticker).
 
-make_rec(Items, Ticker) -> make_rec(Items, #news{ticker = Ticker}, 0).
+make_rec(Items, Ticker) -> 
+	{ok, Pid} = odbc:connect(?ConnectStr,[{timeout, 500000}]),
+	make_rec(Items, #news{ticker = Ticker}, 0, Pid),
+	odbc:disconnect(Pid).
 
-make_rec([H|T], Rec, Count) ->
+make_rec([H|T], Rec, Count, _Pid) ->
 	NewRec = fill_record(H, Rec, Count),
-	make_rec(T, NewRec, Count + 1);
-make_rec([], _Rec, _) ->
-	ok.
+	make_rec(T, NewRec, Count + 1, Pid);
+make_rec([], Rec, _, Pid) ->
+	Query = gen_entry(news, Rec) ++ ";",
+    _Result = odbc:sql_query(Pid, Query).
 
 fill_record(H, Rec, N) ->
 	[_,_,_,_,_,_,_,_,L|_] = tuple_to_list(H),
@@ -47,3 +52,5 @@ fill_record(H, Rec, N) ->
 				N == 4 -> Rec#news{date = Value}
 			end
 	end.
+
+gen_entry(news,R) -> "EXEC s_addNews @Date='"++R#news.date++"',@Symbol='"++R#news.ticker++"',@Headline='"++R#news.headline++"',@Hyperlink='"++R#news.url++"'".
