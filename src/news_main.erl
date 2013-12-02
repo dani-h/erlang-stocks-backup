@@ -1,6 +1,6 @@
 -module(news_main).
 -compile(export_all).
--define(AMOUNT_OF_C_PROC, 50).
+-define(AMOUNT_OF_C_PROC, 100).
 
 start() ->
 	Tickers = startup(),
@@ -10,7 +10,7 @@ start() ->
 
 startup() ->
 	inets:start(),
-	odbc:start(),
+%% 	odbc:start(),
 	register(),
 	parse_nasdaq().
 
@@ -58,14 +58,14 @@ loop_receive(Children, Normal_Exits) ->
 			io:format("**Time: ~p:~p:~p, Finished segment of size: ~p**~n", [H, Min, Sec, Children]);
 		false ->
 			receive
-				{'EXIT', Pid, {failed, Ticker}} ->
-					io:format("RESTARTING PROCESS: ~p~n", [Pid]),
-					spawn_link(rss, process_ticker, [Ticker]),
-					loop_receive(Children, Normal_Exits);
 				{'EXIT', _Pid, normal} ->
 					loop_receive(Children, Normal_Exits + 1);
+				{'EXIT', _Pid, {badmatch, Ticker}} ->
+					Pid = spawn_link(rss, process_ticker, [Ticker]),
+					io:format("Badmatched Ticker: ~p, restarting Pid: ~p~n", [Ticker, Pid]),
+					loop_receive(Children, Normal_Exits);
 				Catch_All -> 
-					io:format("Catch_All: ~p", [Catch_All]),
+					io:format("Catch_All: ~p~n", [Catch_All]),
 					loop_receive(Children, Normal_Exits + 1)
 			end
 	end.

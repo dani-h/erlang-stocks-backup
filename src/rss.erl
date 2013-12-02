@@ -12,11 +12,27 @@
 -include_lib("xmerl/include/xmerl.hrl").
 -include("../include/defs.hrl").
 
+test() ->
+	try
+		A = 2,
+		A = a
+	catch
+		error:badmatch -> io:format("~p~n", [lol]);
+		error:{badmatch, W} -> io:format("~p~n", [W])
+	end.
+
 process_ticker(Ticker) ->
 	inets:start(),
-	{ok, {_Status, _Headers, Body}} = httpc:request("http://articlefeeds.nasdaq.com/nasdaq/symbols?symbol=" ++ string:to_upper(Ticker)),
-    { Xml, _Rest } = xmerl_scan:string(Body),
-    printItems(getElements(Xml), Ticker).
+	try
+		{ok, {_Status, _Headers, Body}} = httpc:request("http://articlefeeds.nasdaq.com/nasdaq/symbols?symbol=" 
+													   ++ string:to_upper(Ticker)),
+	    { Xml, _Rest } = xmerl_scan:string(Body),
+	    printItems(getElements(Xml), Ticker)
+	catch
+		error:{badmatch, _} -> 
+			exit({badmatch, Ticker});
+		error:CatchAll -> io:format("~p~n", [CatchAll])
+	end.
 
 getElements([H|T]) when H#xmlElement.name == item ->
     [H | getElements(T)];
@@ -35,11 +51,11 @@ printItems(Items, Ticker) ->
     lists:foreach(F, Items).
  
 printItem(Item, Ticker) ->
-	{ok, Pid} = odbc:connect(?ConnectStr,[{timeout, 500000}]),
-	_Result = odbc:sql_query(Pid, create_query(Item, Ticker)),
+%% 	{ok, Pid} = odbc:connect(?ConnectStr,[{timeout, 500000}]),
+%% 	_Result = odbc:sql_query(Pid, create_query(Item, Ticker)),
 	% io:format("~p~n", [Result]),
-	odbc:disconnect(Pid).
-	% Q = create_query(Item, Ticker).
+%% 	odbc:disconnect(Pid).
+	_Q = create_query(Item, Ticker).
 	% case length(Q) > 400 of
 		% true -> io:format("~p~n", [Q]);
 		% false -> ok
