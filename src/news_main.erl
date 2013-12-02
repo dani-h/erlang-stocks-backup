@@ -1,15 +1,16 @@
 -module(news_main).
 -compile(export_all).
--define(AMOUNT_OF_C_PROC, 500).
+-define(AMOUNT_OF_C_PROC, 50).
 
 start() ->
 	Tickers = startup(),
+	% {A,_} = lists:split(1, Tickers),
 	parse_news(Tickers).
 %%         timer:apply_interval(216000000, ?MODULE, parse_news, [Tickers, Dates]).
 
 startup() ->
 	inets:start(),
-	%%         odbc:start(),
+	odbc:start(),
 	register(),
 	parse_nasdaq().
 
@@ -42,7 +43,7 @@ spawn_workers(Tickers) ->
 	spawn_workers(Tickers, 0).
 
 spawn_workers([One_Ticker|Rest], Children) ->
-	spawn_link(news_worker, process_news, [One_Ticker]),
+	spawn_link(rss, process_ticker, [One_Ticker]),
 	spawn_workers(Rest, Children + 1);
 spawn_workers([], Children) ->
 	loop_receive(Children).
@@ -57,15 +58,15 @@ loop_receive(Children, Normal_Exits) ->
 			io:format("**Time: ~p:~p:~p, Finished segment of size: ~p**~n", [H, Min, Sec, Children]);
 		false ->
 			receive
-				{'EXIT', _Pid, {failed, Ticker}} ->
-					P = spawn_link(news_worker, process_news, [Ticker]),
-					io:format("RESTARTING PROCESS: ~p~n", [P]),
+				{'EXIT', Pid, {failed, Ticker}} ->
+					io:format("RESTARTING PROCESS: ~p~n", [Pid]),
+					spawn_link(rss, process_ticker, [Ticker]),
 					loop_receive(Children, Normal_Exits);
 				{'EXIT', _Pid, normal} ->
 					loop_receive(Children, Normal_Exits + 1);
 				Catch_All -> 
 					io:format("Catch_All: ~p", [Catch_All]),
-					loop_receive(Children, Normal_Exits)
+					loop_receive(Children, Normal_Exits + 1)
 			end
 	end.
 
