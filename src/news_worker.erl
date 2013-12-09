@@ -1,9 +1,3 @@
-%%% @author  <Dungarov@DUNGAROV-PC>
-%%% @copyright (C) 2013, 
-%%% @doc
-%%%
-%%% @end
-%%% Created : 27 Nov 2013 by  <Dungarov@DUNGAROV-PC>
 
 -module(news_worker).
 -compile(export_all).
