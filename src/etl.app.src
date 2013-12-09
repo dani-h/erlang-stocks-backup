@@ -1,0 +1,26 @@
+{application, etl,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {modules, [
+	etl_sup,
+	hist_gen,
+	hist_worker,
+	news_gen,
+	news_worker,
+	nasdaq_bridge,
+	nasdaqTickers
+	]},
+  {registered, [
+	etl_sup,
+	hist_gen,
+	news_gen,
+	nasdaq_bridge
+	]},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { etl_app, []}},
+  {env, []}
+ ]}.
