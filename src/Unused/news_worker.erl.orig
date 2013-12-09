@@ -1,0 +1,212 @@
+<<<<<<< HEAD
+%%% @author  <Dungarov@DUNGAROV-PC>
+%%% @copyright (C) 2013, 
+%%% @doc
+%%%
+%%% @end
+%%% Created : 27 Nov 2013 by  <Dungarov@DUNGAROV-PC>
+
+-module(news_worker).
+-compile(export_all).
+-include_lib("xmerl/include/xmerl.hrl").
+-include("../include/defs.hrl").
+
+
+process_ticker(Ticker, Restarts) ->
+%% 	io:format("Pid: ~p, Processing Ticker:~p~n", [self(), Ticker]),
+	try
+		{ok, {_Status, _Headers, Body}} = httpc:request(
+			"http://articlefeeds.nasdaq.com/nasdaq/symbols?symbol=" 
+				++ string:to_upper(Ticker)),
+		{ Xml, _Rest } = xmerl_scan:string(Body),
+		printItems(getElements(Xml), Ticker),
+		exit({normal, Ticker})
+	catch
+		error:{badmatch,{error,socket_closed_remotely}} -> 
+%% 			io:format("Socket closed remotely, ticker: ~p~n", [Ticker]),
+			exit({badmatch, Ticker, Restarts});
+		error:{badmatch, {error, {failed_connect,_}}} ->
+%% 			io:format("Failed connect, ticker: ~p~n", [Ticker]),
+			exit({badmatch, Ticker, Restarts});
+		error:{badmatch,{error,timeout}} ->
+%% 			io:format("Timed out, ticker:~p~n", [Ticker]),
+			exit({badmatch, Ticker, Restarts});
+		error:Catch_all -> 
+			io:format("~nIn ex, catch_all, Msg: ~p~n", [Catch_all]),
+			exit({catch_all, Catch_all})
+	end.
+
+getElements([H|T]) when H#xmlElement.name == item ->
+	[H | getElements(T)];
+getElements([H|T]) when is_record(H, xmlElement) ->
+	getElements(H#xmlElement.content) ++
+		getElements(T);                                                                 
+getElements(X) when is_record(X, xmlElement) ->
+	getElements(X#xmlElement.content);
+getElements([_|T]) ->
+	getElements(T);
+getElements([]) ->
+	[].
+
+printItems(Items, Ticker) ->
+	printItems(Items, [], Ticker).
+
+printItems([H|T], Acc, Ticker) ->
+	printItems(T, [create_query(H, Ticker)|Acc], Ticker);
+printItems([], Acc, _Ticker) -> 
+	ok.
+%% 	io:format("~p~n", [Acc]).
+%% 	{ok, Pid} = odbc:connect(?ConnectStr,[{timeout, 2000}]),
+%% 	_Result = odbc:sql_query(Pid, Acc),
+%% 	odbc:disconnect(Pid).
+
+first(Item, Tag) ->
+	hd([X || X <- Item#xmlElement.content,
+			 X#xmlElement.name == Tag]).
+
+textOf(Item) ->
+	lists:flatten([X#xmlText.value || X <- Item#xmlElement.content,
+									  element(1,X) == xmlText]).
+
+create_query(Item, Ticker)	->	 
+	Record = #news{date = format_date(textOf(first(Item, pubDate))), 
+				   url = textOf(first(Item, link)),
+				   headline = filter_headline(textOf(first(Item, title))),
+				   ticker = Ticker}, 
+	gen_entry(news, Record) ++ ";".
+
+filter_headline(Var) ->
+	NewList = delete(Var, []),
+	re:replace(NewList, "&#39;", "", [global, {return, list}]).
+
+delete([H|T], Acc) when H > 127 ->
+=======
+-module(news_worker).
+-compile(export_all).
+-include("../include/defs.hrl").
+
+process_news(Ticker) ->
+	inets:start(),
+	URL = "http://feeds.finance.yahoo.com/rss/2.0/headline?s=" ++ Ticker ++ "&region=US&lang=en-US",
+	% io:format("~p~n", [URL]).
+	% try
+		{ok, {_,_,Unfiltered}} = httpc:request(URL),
+		% io:format("~ts~n", [Unfiltered]).
+		% fix(Unfiltered).
+		% io:format("~ts~n", [fix(Unfiltered)]).
+		% Z = unicode:characters_to_list(Unfiltered, latin1),
+		% fix_unicode(Unfiltered).
+		% Filtered = filter(Unfiltered),
+		process_xml(fix(Unfiltered), Ticker).
+	% catch
+		% _:_ ->  exit({failed, Ticker})
+	% end.	
+	
+	% apei
+	% "http://finance.yahoo.com/news/american-public-university-system-selected-161700818.html
+
+
+fix(Unfiltered) ->
+	Filtered = delete(Unfiltered),
+	% Binary = unicode:characters_to_binary(Filtered, unicode, latin1),
+	% Dani = binary_to_list(Binary),
+	A = re:replace(Filtered, "&quot;", "", [global, {return, list}]),
+	B = re:replace(A, "&apos;", "", [global, {return, list}]),
+	B.
+	
+delete(List) -> delete(List, []).
+
+delete([H|T], Acc) when H > 127 ->
+	% io:format("~p~n", [H]),
+>>>>>>> 1943f1b385d87f023302421920b319335370417b
+	delete(T, Acc);
+delete([H|T], Acc) ->
+	delete(T, Acc ++ [H]);
+delete([], Acc) -> 
+	Acc.
+<<<<<<< HEAD
+
+format_date(Var) ->
+	{A, _} = lists:split(16, Var),
+	{{Y, M, D}, _} = ec_date:parse(A),
+	Date = integer_to_list(Y) ++ "-"
+			   ++ integer_to_list(M) ++ "-"
+			   ++ integer_to_list(D),
+	Date.
+
+% Code below by Robert Petre
+gen_entry(news,R) -> "EXEC s_addNews @Date='"++R#news.date++"',@Symbol='"++R#news.ticker++"',@Headline='"++R#news.headline++"',@Hyperlink='"++R#news.url++"'".
+=======
+	
+	
+% fix_unicode(XmlString) ->
+	% B = re:split(A, "
+	% Binary = unicode:characters_to_binary(XmlString, unicode, latin1),
+	% N = binary_to_list(Binary),
+	% A = re:replace(N, "&quot;", "", [global, {return, list}]),
+	% B = re:replace(A, "&apos;", "", [global, {return, list}]),
+	% C = re:replace(B, "&rsquo;", "", [global, {return, list}]),%â
+	% io:format("~s~n", [re:split(B, "q", [{return, binary}])]).
+	% io:format("~ts~n", [N]).
+	
+process_xml(File, Ticker) ->
+	{XML, _} = xmerl_scan:string(File),
+	News =  xmerl_xpath:string("//item", XML),
+	lists:foreach(fun(H) -> extract_elements(H, Ticker) end, News).
+	
+extract_elements(Tuples, Ticker) ->
+	{_, _, _, _, _, _, _, _, Items, _, _, _} = Tuples,
+	make_rec(Items, Ticker).
+
+make_rec(Items, Ticker) -> 
+	{ok, Pid} = odbc:connect(?ConnectStr,[{timeout, 500000}]),
+	make_rec(Items, #news{ticker = Ticker}, 0, Pid),
+	odbc:disconnect(Pid).
+	
+
+make_rec([H|T], Rec, Count, Pid) ->
+	NewRec = fill_record(H, Rec, Count),
+	make_rec(T, NewRec, Count + 1, Pid);
+make_rec([], Rec, _, Pid) ->
+	Query = gen_entry(news, Rec) ++ ";",
+	% case length(Query) > 400 of 
+		% true -> 
+			% io:format("~p~n", [Rec]);
+			% io:format("~p~n", [Query]);
+		% false -> ok
+	% end,
+    _Result = odbc:sql_query(Pid, Query),
+	% io:format("~p~n", [Result]),
+	ok.
+
+fill_record(H, Rec, N) ->
+	[_,_,_,_,_,_,_,_,L|_] = tuple_to_list(H),
+	case L of
+		[] -> Rec;
+		Element -> 
+			[{_,_,_,_,Value,_}|_] = Element,
+			if 
+				N == 0 -> Rec#news{headline = Value};
+				N == 1 -> Rec#news{url = format_url(Value)};
+				N == 2 -> Rec;
+				N == 3 -> Rec;
+				N == 4 -> Rec#news{date = format_date(Value)}
+			end
+	end.
+	
+format_url(Var) ->
+	case string:tokens(Var, "*") of
+		[URL] -> URL;
+		[_, URL] ->	URL;
+		[_, _, URL] -> URL
+	end.
+	
+format_date(Var) ->
+	{{Y, M, D}, _} = ec_date:parse(Var),
+	Date = integer_to_list(Y) ++ "-"
+			++ integer_to_list(M) ++ "-"
+			++ integer_to_list(D),
+	Date.
+
+gen_entry(news,R) -> "EXEC s_addNews @Date='"++R#news.date++"',@Symbol='"++R#news.ticker++"',@Headline='"++R#news.headline++"',@Hyperlink='"++R#news.url++"'".
+>>>>>>> 1943f1b385d87f023302421920b319335370417b
